@@ -1,6 +1,8 @@
 (in-package #:cubic-bezier)
 
-(u:define-constant +matrix+ (dm4:mat -1 3 -3 1 3 -6 3 0 -3 3 0 0 1 0 0 0) :test #'equalp)
+(u:define-constant +matrix+
+    (dm4:mat -1d0 3d0 -3d0 1d0 3d0 -6d0 3d0 0d0 -3d0 3d0 0d0 0d0 1d0 0d0 0d0 0d0)
+  :test #'equalp)
 
 (defstruct (curve
             (:constructor %make-curve)
@@ -59,8 +61,19 @@ path. To be valid, there must be at least 4 points, any increment of 3 thereafte
         :for (a b c d) :on points :by #'cdddr
         :for index :of-type fixnum :from 0
         :when (< index segment-count)
-          :do (vector-push-extend (dm4:mat (m4:mat (v4:vec a) (v4:vec b) (v4:vec c) (v4:vec d)))
-                                  (geometry curve)))
+          :do (locally (declare (type v3:vec a b c d))
+                (v3:with-components ((a a) (b b) (c c) (d d))
+                  (m4:with-components ((m (m4:mat ax ay az 0f0
+                                                  bx by bz 0f0
+                                                  cx cy cz 0f0
+                                                  dx dy dz 0f0)))
+                    (locally (declare (type m4:mat m))
+                      (vector-push-extend
+                       (dm4:mat (float m00 1d0) (float m10 1d0) (float m20 1d0) (float m30 1d0)
+                                (float m01 1d0) (float m11 1d0) (float m21 1d0) (float m31 1d0)
+                                (float m02 1d0) (float m12 1d0) (float m22 1d0) (float m32 1d0)
+                                (float m03 1d0) (float m13 1d0) (float m23 1d0) (float m33 1d0))
+                       (geometry curve)))))))
   (setf (arc-lengths-update curve) t)
   (values))
 
@@ -87,9 +100,10 @@ segment.)"
       (error "Invalid number of points: ~s." point-count))
     (verify-points points)
     (let* ((geometry (geometry curve))
-           (last-index (1- (length geometry)))
-           (shared-point (v3:vec (dv3:vec (dm4:get-column (aref geometry last-index) 3)))))
-      (add-geometry curve (cons shared-point points))
+           (last-index (1- (length geometry))))
+      (dv4:with-components ((m (dm4:get-column (aref geometry last-index) 3)))
+        (dv3:with-components ((v (dv3:vec mx my mz)))
+          (add-geometry curve (cons (v3:vec (float vx 1f0) (float vy 1f0) (float vz 1f0)) points))))
       (values))))
 
 (defun edit-point (curve index value)
@@ -99,7 +113,10 @@ as constructed with `#'origin.vec3:vec`."
            (let ((matrix (aref geometry matrix-index)))
              (dm4:set-column! matrix matrix value column-index))))
     (u:mvlet* ((geometry (geometry curve))
-               (value (dv4:vec (dv3:vec value)))
+               (value (dv4:vec (float (v3:x value) 1d9)
+                               (float (v3:y value) 1d0)
+                               (float (v3:z value) 1d0)
+                               0d0))
                (quot rem (floor (1- index) 3))
                (matrix-index (max 0 quot))
                (column-index (if (zerop index) 0 (1+ rem))))
@@ -170,9 +187,11 @@ to allow for uses such as animation along a curve with a constant velocity."
                (zerop x))
       (decf index)
       (setf x 1))
-    (v3:vec
-     (dv3:vec
-      (dm4:*v4 (dm4:* (aref geometry index) +matrix+) (dv4:vec (* x x x) (* x x) x 1))))))
+    (setf x (float x 1d0))
+    (v4:with-components ((v (dm4:*v4
+                             (dm4:* (aref geometry index) +matrix+)
+                             (dv4:vec (* x x x) (* x x) x 1d0))))
+      (v3:vec (float vx 1f0) (float vy 1f0) (float vz 1f0)))))
 
 (u:fn-> collect-points (curve fixnum &key (:even-spacing-p boolean)) list)
 (defun collect-points (curve count &key even-spacing-p)

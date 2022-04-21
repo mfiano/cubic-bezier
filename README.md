@@ -70,6 +70,6 @@ for `#'evaluate` for more information.
 
 ## License
 
-Copyright © Michael Fiano <mail@mfiano.net>.
+Copyright © 2021-2022 Michael Fiano <mail@mfiano.net>.
 
 Licensed under the MIT License.
